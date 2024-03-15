@@ -16,6 +16,8 @@ router
 export interface Env {
     //This will be auto-populated with the KV Namespace that is bound in the wrangler.toml
     //and exposes all the methods you'll need (get, put, list etc.)
+    CLIENT_ID: string;
+    CLIENT_SECRET: string;
 }
 
 export default {

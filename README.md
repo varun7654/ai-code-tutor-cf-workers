@@ -2,7 +2,7 @@
 
 > A Cloudflare Worker + GitHub Pages Login Example
 
-The [github-oauth-login.js](src/github-oauth-login.js) file is a [Cloudflare Worker](https://workers.cloudflare.com/) which is continuously deployed using GitHub Actions (see [.github/workflows/deploy.yml](.github/workflows/deploy.yml)).
+The [github-oauth-login.ts](src/github-oauth-login.ts) file is a [Cloudflare Worker](https://workers.cloudflare.com/) which is continuously deployed using GitHub Actions (see [.github/workflows/deploy.yml](.github/workflows/deploy.yml)).
 
 The worker does 3 things
 
@@ -41,7 +41,7 @@ Note that you require access to the new GitHub Actions for the automated deploym
 1. Enable GitHub Pages in your repository settings, select `Source` to be the `master branch`.
 1. In [index.html](index.html), replace the `gr2m` workers subdomain with your own, in `WORKER_URL` and the login `<a href="...">` tag.
 
-That should be it. The `github-oauth-login.js` file will now be continously deployed to Cloudflare each time there is a commit to master.
+That should be it. The `github-oauth-login.ts` file will now be continously deployed to Cloudflare each time there is a commit to master.
 
 ## See also
 

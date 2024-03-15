@@ -1,8 +1,7 @@
 // use secrets
-const client_id = CLIENT_ID;
-const client_secret = CLIENT_SECRET;
+import {Env} from "./handler";
 
-export default async function handle(request) {
+export default async function handle(request: Request, env: Env) {
   // handle CORS pre-flight request
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -17,7 +16,7 @@ export default async function handle(request) {
   // redirect GET requests to the OAuth login page on github.com
   if (request.method === "GET") {
     return Response.redirect(
-      `https://github.com/login/oauth/authorize?client_id=${client_id}`,
+      `https://github.com/login/oauth/authorize?client_id=${env.CLIENT_ID}`,
       302
     );
   }
@@ -31,10 +30,10 @@ export default async function handle(request) {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "user-agent": "cloudflare-worker-github-oauth-login-demo",
+          "user-agent": "cloudflare-worker-ai-tutor-login",
           accept: "application/json",
         },
-        body: JSON.stringify({ client_id, client_secret, code }),
+        body: JSON.stringify({"client_id": env.CLIENT_ID, "client_secret": env.CLIENT_SECRET, "code": code }),
       }
     );
     const result = await response.json();
