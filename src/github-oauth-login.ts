@@ -1,5 +1,5 @@
 // use secrets
-import {corsHeaders, Env} from "./handler";
+import {corsHeaders, Env, getHeaders} from "./handler";
 
 export async function handleAuth(request: Request, env: Env): Promise<Response> {
   // handle CORS pre-flight request
@@ -26,7 +26,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
       console.error("Error parsing JSON:", error);
       return new Response("Invalid JSON in request body", {
         status: 400,
-        headers: corsHeaders(request.headers.get('origin') || ''),
+        headers: getHeaders(request),
       });
     }
 
@@ -48,19 +48,19 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
     } = await response.json();
 
     if (result.error) {
-      return new Response(JSON.stringify(result), { status: 401, headers: corsHeaders(request.headers.get('origin') || ''),
+      return new Response(JSON.stringify(result), { status: 401, headers: getHeaders(request),
       });
     }
 
     return new Response(JSON.stringify({ token: result.access_token }), {
       status: 201,
-      headers: corsHeaders(request.headers.get('origin') || ''),
+      headers: getHeaders(request),
     });
   } catch (error) {
     console.error(error);
     return new Response(error.message, {
       status: 500,
-      headers: corsHeaders(request.headers.get('origin') || ''),
+      headers: getHeaders(request),
     });
   }
 }
