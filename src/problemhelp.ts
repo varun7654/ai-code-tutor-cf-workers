@@ -4,7 +4,7 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('token ') || authHeader.split(' ').length !== 2) {
         return new Response(
-            JSON.stringify({status: 401, statusText: 'Unauthorized', expire_logins: false}),
+            JSON.stringify({status: 401, statusText: 'Unauthorized (Invalid token)', expire_logins: false}),
             {status: 401, headers: getHeaders(request)}
         );
     }
@@ -21,7 +21,9 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
         return new Response(
             JSON.stringify({
                 status: 401,
-                statusText: 'Unauthorized',
+                statusText: 'Unauthorized (GitHub API)',
+                response_status: response.status,
+                response_statusText: response.bodyUsed ? await response.text() : response.statusText,
                 expire_logins: true,
                 error: await response.text()
             }),
