@@ -22,9 +22,9 @@ export interface Env {
 
 export default {
     async fetch(request: Request, env: Env) {
-        return router.handle(request);
+        return router.handle(request, env);
     },
     async get(request: Request, env: Env) {
-        return router.handle(request);
+        return router.handle(request, env);
     },
 };
