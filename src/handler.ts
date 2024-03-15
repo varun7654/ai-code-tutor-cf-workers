@@ -1,12 +1,29 @@
-import { RequestLike, Router } from 'itty-router';
-import handle from "./github-oauth-login";
-
+import {Router} from 'itty-router';
+import {handleAuth} from "./github-oauth-login";
 
 const router = Router();
 
+export const corsHeaders = (origin: string) => ({
+    'Access-Control-Allow-Origin': origin.includes('localhost') || origin.includes("127.0.0.1") ? origin : 'https://codetutor.dacubeking.com',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+});
+
+export const withCorsPreflight = (request: Request) => {
+    if (request.method.toLowerCase() === 'options') {
+        return new Response('ok', {
+            headers: corsHeaders(request.headers.get('origin') || ''),
+        });
+    }
+};
+
+
 router
-.get("/auth", handle)
-.all("*", () => new Response("Not Found", { status: 404 }));
+    .all('*', withCorsPreflight)
+    .get("/auth*", handleAuth)
+    .post("/auth*", handleAuth)
+    .get("*", (request) => new Response("Not Found", { status: 404, headers: corsHeaders(request.headers.get('origin') || ''),
+    }));
 
 
 

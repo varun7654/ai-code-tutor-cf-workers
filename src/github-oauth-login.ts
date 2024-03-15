@@ -1,15 +1,12 @@
 // use secrets
-import {Env} from "./handler";
+import {corsHeaders, Env} from "./handler";
 
-export default async function handle(request: Request, env: Env) {
+export async function handleAuth(request: Request, env: Env): Promise<Response> {
   // handle CORS pre-flight request
   if (request.method === "OPTIONS") {
     return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
+        status: 204,
+        ...corsHeaders
     });
   }
 
@@ -17,12 +14,21 @@ export default async function handle(request: Request, env: Env) {
   if (request.method === "GET") {
     return Response.redirect(
       `https://github.com/login/oauth/authorize?client_id=${env.CLIENT_ID}`,
-      302
+      302,
     );
   }
 
   try {
-    const { code } = await request.json();
+    let code;
+    try {
+      ({ code } = await request.json());
+    } catch (error) {
+      console.error("Error parsing JSON:", error);
+      return new Response("Invalid JSON in request body", {
+        status: 400,
+        headers: corsHeaders(request.headers.get('origin') || ''),
+      });
+    }
 
     const response = await fetch(
       "https://github.com/login/oauth/access_token",
@@ -36,23 +42,25 @@ export default async function handle(request: Request, env: Env) {
         body: JSON.stringify({"client_id": env.CLIENT_ID, "client_secret": env.CLIENT_SECRET, "code": code }),
       }
     );
-    const result = await response.json();
-    const headers = {
-      "Access-Control-Allow-Origin": "*",
-    };
+    const result : {
+        error?: string,
+        access_token?: string
+    } = await response.json();
 
     if (result.error) {
-      return new Response(JSON.stringify(result), { status: 401, headers });
+      return new Response(JSON.stringify(result), { status: 401, headers: corsHeaders(request.headers.get('origin') || ''),
+      });
     }
 
     return new Response(JSON.stringify({ token: result.access_token }), {
       status: 201,
-      headers,
+      headers: corsHeaders(request.headers.get('origin') || ''),
     });
   } catch (error) {
     console.error(error);
     return new Response(error.message, {
       status: 500,
+      headers: corsHeaders(request.headers.get('origin') || ''),
     });
   }
 }

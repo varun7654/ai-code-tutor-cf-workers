@@ -10,6 +10,7 @@
     ]
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "itty-router": "^4.2.1"
   },
   "devDependencies": {
