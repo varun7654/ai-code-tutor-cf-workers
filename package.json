@@ -1,0 +1,15 @@
+{
+  "name": "cloudflare-worker-github-oauth-login",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Cloudflare Worker + GitHub Pages Login Example",
+  "main": "github-oauth-login.js",
+  "author": "Gregor Martynus (https://twitter.com/gr2m)",
+  "license": "ISC",
+  "repository": "github:gr2m/cloudflare-worker-github-oauth-login",
+  "release": {
+    "branches": [
+      "main"
+    ]
+  }
+}
