@@ -1,6 +1,7 @@
 import {Router} from 'itty-router';
 import {handleAuth} from "./github-oauth-login";
 import {handleProblemHelp} from "./problemhelp";
+import {s} from "vitest/dist/global-58e8e951";
 
 const router = Router();
 
@@ -45,6 +46,7 @@ router
 export interface Env {
     //This will be auto-populated with the KV Namespace that is bound in the wrangler.toml
     //and exposes all the methods you'll need (get, put, list etc.)
+    OPEN_AI_KEY: string;
     CLIENT_ID: string;
     CLIENT_SECRET: string;
     CLIENT_ID_DEV: string;
