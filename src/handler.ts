@@ -10,6 +10,11 @@ export const corsHeaders = (origin: string) => ({
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 });
 
+export const isRefererLocalhost = (request: Request) => {
+    const origin = request.headers.get('Referer') || '';
+    return origin.includes('localhost') || origin.includes("127.0.0.1");
+}
+
 export const withCorsPreflight = (request: Request) => {
     if (request.method.toLowerCase() === 'options') {
         return new Response('ok', {
@@ -42,6 +47,8 @@ export interface Env {
     //and exposes all the methods you'll need (get, put, list etc.)
     CLIENT_ID: string;
     CLIENT_SECRET: string;
+    CLIENT_ID_DEV: string;
+    CLIENT_SECRET_DEV: string
 }
 
 export default {

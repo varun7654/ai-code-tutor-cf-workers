@@ -1,7 +1,11 @@
 // use secrets
-import {corsHeaders, Env, getHeaders} from "./handler";
+import {corsHeaders, Env, getHeaders, isRefererLocalhost} from "./handler";
 
 export async function handleAuth(request: Request, env: Env): Promise<Response> {
+  // use CLIENT_ID_DEV if we're calling from localhost
+  let client_id = isRefererLocalhost(request) ? env.CLIENT_ID_DEV : env.CLIENT_ID;
+  let client_secret = isRefererLocalhost(request) ? env.CLIENT_SECRET_DEV : env.CLIENT_SECRET;
+
   // handle CORS pre-flight request
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -13,7 +17,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
   // redirect GET requests to the OAuth login page on github.com
   if (request.method === "GET") {
     return Response.redirect(
-      `https://github.com/login/oauth/authorize?client_id=${env.CLIENT_ID}`,
+      `https://github.com/login/oauth/authorize?client_id=${client_id}`,
       302,
     );
   }
@@ -39,7 +43,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
           "user-agent": "cloudflare-worker-ai-tutor-login",
           accept: "application/json",
         },
-        body: JSON.stringify({"client_id": env.CLIENT_ID, "client_secret": env.CLIENT_SECRET, "code": code }),
+        body: JSON.stringify({"client_id": client_id, "client_secret": client_secret, "code": code }),
       }
     );
     const result : {

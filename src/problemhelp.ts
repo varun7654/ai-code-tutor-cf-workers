@@ -30,7 +30,7 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
     }
 
     const userData = await response.json();
-    const authorizedUsernames = ['varun7654']; // Replace with your list of authorized usernames
+    const authorizedUsernames = ['varun7654', 'anishalata']; // Replace with your list of authorized usernames
 
     if (!authorizedUsernames.includes(userData.login)) {
         return new Response(
