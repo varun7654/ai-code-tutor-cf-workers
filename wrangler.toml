@@ -1,3 +1,4 @@
 name = "code-ai"
 account_id = "f5dbfc5cf299cd799bf49f258675f82b"
 workers_dev = true
+main = "./src/handler.ts"
