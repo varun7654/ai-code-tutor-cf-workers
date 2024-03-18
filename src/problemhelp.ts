@@ -40,7 +40,7 @@ export class TestResults {
     public expectedResults: string[] = [];
     public parseError: string = "";
     public errorLine: number = -1;
-    public runtimeError: any = null;
+    public runtimeError: string = "";
     public output: string = "";
     public ranSuccessfully: boolean = false;
 }
@@ -198,16 +198,19 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
             \`\`\`
             The error is on line ${userData.testResults.errorLine}.
             `;
-        } else if (userData.testResults.runtimeError !== null) {
+        } else if (userData.testResults.runtimeError !== "") {
             prompt += `
             The user's code did not run successfully. The user's code failed to run. The error is as follows:
             \`\`\`
             ${userData.testResults.runtimeError.toString()}
             \`\`\`
             `;
+        } else {
+            prompt += `We aren't sure what went wrong. The user's code did not run successfully. We are not sure why.
+                Tell the user of this and tell them if you can't help them. If you can help them, try to help them debug the issue like you would with a normal issue.`
         }
     }
-    console.log(prompt);
+    console.log(JSON.stringify(userData.testResults.runtimeError));
 
 
     const chatCompletion = await openai.chat.completions.create({
