@@ -31,7 +31,8 @@ let systemMessage = "You are a helpful tutor on a website that is teaching peopl
     " - Check for stray characters and syntax errors. \n" +
     " - Check the user is defining the same function that is being called in the solution/test cases. \n" +
     " - The user cannot directly ask for help or ask questions to the tutor. \n" +
-    " - The user is usually given the function signature as a template. \n";
+    " - The user is usually given the function signature as a template. \n" +
+    " - The user is not given the solution code DO NOT MENTION IT. \n";
 
 
 
