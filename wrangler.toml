@@ -3,3 +3,8 @@ account_id = "f5dbfc5cf299cd799bf49f258675f82b"
 workers_dev = true
 main = "./src/handler.ts"
 compatibility_date = "2024-03-15"
+
+
+d1_databases = [
+    { binding = "DB", database_name = "code-ai", database_id = "08bdd893-0ec1-459a-86ea-b492e52e8d3a" }
+]

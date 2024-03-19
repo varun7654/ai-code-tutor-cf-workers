@@ -1,7 +1,6 @@
 import {Router} from 'itty-router';
 import {handleAuth} from "./github-oauth-login";
 import {handleProblemHelp} from "./problemhelp";
-import {s} from "vitest/dist/global-58e8e951";
 
 const router = Router();
 
@@ -51,6 +50,8 @@ export interface Env {
     CLIENT_SECRET: string;
     CLIENT_ID_DEV: string;
     CLIENT_SECRET_DEV: string
+    // @ts-ignore
+    DB: D1Database;
 }
 
 export default {
