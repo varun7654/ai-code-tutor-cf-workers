@@ -2,6 +2,8 @@ import {Router} from 'itty-router';
 import {handleAuth} from "./github-oauth-login";
 import {handleProblemHelp} from "./problemhelp";
 
+import type { Database } from '@cloudflare/d1';
+
 const router = Router();
 
 export const corsHeaders = (origin: string) => ({
@@ -50,8 +52,7 @@ export interface Env {
     CLIENT_SECRET: string;
     CLIENT_ID_DEV: string;
     CLIENT_SECRET_DEV: string
-    // @ts-ignore
-    DB: D1Database;
+    DB: Database;
 }
 
 export default {

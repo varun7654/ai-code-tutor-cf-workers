@@ -16,7 +16,8 @@
     "openai": "^4.29.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4",
+    "@cloudflare/workers-types": "^4.20240314.0",
+    "@cloudflare/d1": "^1.4.1",
     "vitest": "^0.24.5",
     "wrangler": "^2.21.0"
   }
