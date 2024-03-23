@@ -144,47 +144,54 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
 
 
     let prompt = `
-    A user is asking for help with the following problem. The problem is as follows:
-    ## ${problemData.title}
-    ${problemData.description}
-    ## Here is an example solution to further illustrate the problem:
-    ${problemData.solution}
-    
-    DO NOT SHARE THE SOLUTION CODE WITH THE USER. The user does not know the existence of the solution code. DO NOT MENTION IT.
-    The user is not given the solution code. The user is not to gain access to the solution code under any circumstances.
-    
-    # The user's code is as follows:
-    \`\`\`${problemData.codeLang}
-    // Below is the first line the user has wrote. This is line 0
-    ${userData.currentCode}
-    // Below is the last line the user has wrote. This is line ${userData.currentCode.split('\n').length - 1}
-    \`\`\`
-    `;
+A user is asking for help with the following problem. The problem is as follows:
+## ${problemData.title}
+${problemData.description}
+## Here is an example solution to further illustrate the problem:
+${problemData.solution}
+
+DO NOT SHARE THE SOLUTION CODE WITH THE USER. The user does not know the existence of the solution code. DO NOT MENTION IT.
+The user is not given the solution code. The user is not to gain access to the solution code under any circumstances.
+
+# The user's code is as follows:
+\`\`\`${problemData.codeLang}
+// Below is the first line the user has wrote. This is line 0
+${userData.currentCode}
+// Below is the last line the user has wrote. This is line ${userData.currentCode.split('\n').length - 1}
+\`\`\`
+`;
 
     if (userData.testResults.ranSuccessfully) {
         if (userData.testResults.testResults.every(result => result === TestResult.Passed)) {
             prompt += `
-            The user's code is working. Congratulations to the user.
+The user's code is working. Congratulations to the user.
             `;
         } else {
             prompt += `
-            The user's code ran without any runtime errors. However, the user's code did not pass all the tests. The user's code did not pass the following tests:
+The user's code ran without any runtime errors. However, the user's code did not pass all the tests. The user's code did not pass the following tests:
             `
+
+            let hiddenFailedCount = 0;
+
             for (let i = 0; i < userData.testResults.testResults.length; i++) {
                 if (userData.testResults.testResults[i] === TestResult.Failed) {
                     if (i < problemData.tests.length) {
                         prompt += `
-                        - Test ${i + 1}: \`${problemData.tests[i]}\`
-                            - Returned: \`${userData.testResults.returnedResults[i]}\`
-                            - Expected: \`${userData.testResults.expectedResults[i]}\`
+- Test ${i + 1}: \`${problemData.tests[i]}\`
+    - Returned: \`${userData.testResults.returnedResults[i]}\`
+    - Expected: \`${userData.testResults.expectedResults[i]}\`
                         `;
                     } else {
-                        prompt += `
-                        - Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTests[i - problemData.tests.length]}\`
-                            - Returned: \`${userData.testResults.returnedResults[i]}\`
-                            - Expected: \`${userData.testResults.expectedResults[i]}\`
-                            - THIS TEST IS CONFIDENTIAL. DO NOT DISCLOSE THE PARAMETERS OR THE EXPECTED RESULTS TO THE USER.
+                        if (hiddenFailedCount < 4) {
+                            prompt += `
+- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTests[i - problemData.tests.length]}\`
+    - Returned: \`${userData.testResults.returnedResults[i]}\`
+    - Expected: \`${userData.testResults.expectedResults[i]}\`
+    - THIS TEST IS CONFIDENTIAL. DO NOT DISCLOSE THE PARAMETERS OR THE EXPECTED RESULTS TO THE USER.
                         `;
+                        }
+                        hiddenFailedCount++;
+
                     }
                 }
             }
@@ -192,22 +199,22 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
     } else {
         if (userData.testResults.parseError !== "") {
             prompt += `
-            The user's code did not run successfully. The user's code failed to compile. The error is as follows:
-            \`\`\`
-            ${userData.testResults.parseError}
-            \`\`\`
-            The error is on line ${userData.testResults.errorLine}.
+The user's code did not run successfully. The user's code failed to compile. The error is as follows:
+\`\`\`
+${userData.testResults.parseError}
+\`\`\`
+The error is on line ${userData.testResults.errorLine}.
             `;
         } else if (userData.testResults.runtimeError !== "") {
             prompt += `
-            The user's code did not run successfully. The user's code failed to run. The error is as follows:
-            \`\`\`
-            ${userData.testResults.runtimeError.toString()}
-            \`\`\`
+The user's code did not run successfully. The user's code failed to run. The error is as follows:
+\`\`\`
+${userData.testResults.runtimeError.toString()}
+\`\`\`
             `;
         } else {
             prompt += `We aren't sure what went wrong. The user's code did not run successfully. We are not sure why.
-                Tell the user of this and tell them if you can't help them. If you can help them, try to help them debug the issue like you would with a normal issue.`
+Tell the user of this and tell them if you can't help them. If you can help them, try to help them debug the issue like you would with a normal issue.`
         }
     }
     console.log(JSON.stringify(userData.testResults.runtimeError));
