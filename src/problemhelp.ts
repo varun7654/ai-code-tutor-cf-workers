@@ -9,7 +9,9 @@ export class ProblemData {
     preProblemDescription: string = "";
     description: string = "";
     tests: string[] = [];
+    testsDisplay: string[] = [];
     hiddenTests: string[] = []
+    hiddenTestsDisplay: string[] = [];
     displayAbove: string = "";
     displayBelow: string = "";
     solution: string = "";
@@ -177,14 +179,14 @@ The user's code ran without any runtime errors. However, the user's code did not
                 if (userData.testResults.testResults[i] === TestResult.Failed) {
                     if (i < problemData.tests.length) {
                         prompt += `
-- Test ${i + 1}: \`${problemData.tests[i]}\`
+- Test ${i + 1}: \`${problemData.testsDisplay[i]}\`
     - Returned: \`${userData.testResults.returnedResults[i]}\`
     - Expected: \`${userData.testResults.expectedResults[i]}\`
                         `;
                     } else {
                         if (hiddenFailedCount < 4) {
                             prompt += `
-- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTests[i - problemData.tests.length]}\`
+- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTestsDisplay[i - problemData.tests.length]}\`
     - Returned: \`${userData.testResults.returnedResults[i]}\`
     - Expected: \`${userData.testResults.expectedResults[i]}\`
     - THIS TEST IS CONFIDENTIAL. DO NOT DISCLOSE THE PARAMETERS OR THE EXPECTED RESULTS TO THE USER.
