@@ -120,7 +120,7 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
     }
 
     const ghUserData : {login: string} = await response.json();
-    const authorizedUsernames = ['varun7654', 'anishalata', 'Spand3xN00dl3']; // Replace with your list of authorized usernames
+    const authorizedUsernames = ['varun7654', 'anishalata', 'Gresliebear', 'Spand3xN00dl3']; // Replace with your list of authorized usernames
 
     if (!authorizedUsernames.includes(ghUserData.login)) {
         return new Response(
