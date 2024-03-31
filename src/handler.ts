@@ -7,7 +7,7 @@ import type { Database } from '@cloudflare/d1';
 const router = Router();
 
 export const corsHeaders = (origin: string) => ({
-    'Access-Control-Allow-Origin': origin.includes('localhost') || origin.includes("127.0.0.1") ? origin : 'https://codetutor.dacubeking.com',
+    'Access-Control-Allow-Origin': origin.includes('localhost') || origin.includes("127.0.0.1") ? origin : 'https://wecode.dacubeking.com',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 });
