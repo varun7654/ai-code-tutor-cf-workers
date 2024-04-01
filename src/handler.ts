@@ -57,9 +57,37 @@ export interface Env {
 
 export default {
     async fetch(request: Request, env: Env) {
-        return router.handle(request, env);
+        try {
+            let response = await router.handle(request, env);
+            console.log(JSON.stringify(response));
+            return response;
+        } catch (e) {
+            return new Response(
+                JSON.stringify({
+                    status: 500,
+                    statusText: 'Internal Server Error 3',
+                    error: e.toString(),
+                    expire_logins: false,
+                }),
+                {status: 500, headers: getHeaders(request)}
+            );
+        }
     },
     async get(request: Request, env: Env) {
-        return router.handle(request, env);
+        try {
+            let response = await router.handle(request, env);
+            console.log(JSON.stringify(response));
+            return response;
+        } catch (e) {
+            return new Response(
+                JSON.stringify({
+                    status: 500,
+                    statusText: 'Internal Server Error 3',
+                    error: JSON.stringify(e, Object.getOwnPropertyNames(e)),
+                    expire_logins: false,
+                }),
+                {status: 500, headers: getHeaders(request)}
+            );
+        }
     },
 };

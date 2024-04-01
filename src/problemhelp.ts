@@ -8,16 +8,36 @@ export class ProblemData {
     title: string = 'Loading...';
     preProblemDescription: string = "";
     description: string = "";
-    tests: string[] = [];
-    testsDisplay: string[] = [];
-    hiddenTests: string[] = []
-    hiddenTestsDisplay: string[] = [];
+    tests: TestCase[] = [];
+    hiddenTests: TestCase[] = [];
     displayAbove: string = "";
     displayBelow: string = "";
     solution: string = "";
     solutionCode: string = "";
     codeLang: string = "";
     nextProblemId: string = "";
+}
+
+export class TestCase {
+    test: string;
+    display: string;
+    magicLinks: KeyValue[];
+
+    constructor(test: string, display: string, magicLinks: KeyValue[]) {
+        this.test = test;
+        this.display = display;
+        this.magicLinks = magicLinks;
+    }
+}
+
+export class KeyValue {
+    key: string;
+    value: string;
+
+    constructor(key: string, value: string) {
+        this.key = key;
+        this.value = value;
+    }
 }
 
 export class UserData {
@@ -155,16 +175,32 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
             {status: 401, headers: getHeaders(request)}
         );
     }
+    let userData: UserData;
+    let problemData: ProblemData;
+    try {
 
-    let body = await request.json();
+        let body = await request.json();
 
-    let userData = body.userData as UserData;
-    let problemData = body.problemData as ProblemData;
-
+         userData = body.userData as UserData;
+         problemData = body.problemData as ProblemData;
+    } catch (e) {
+        console.log(e);
+        return new Response(
+            JSON.stringify({
+                status: 500,
+                statusText: 'Internal Server Error 1',
+                error: JSON.stringify(e, Object.getOwnPropertyNames(e)),
+                expire_logins: false,
+            }),
+            {status: 500, headers: getHeaders(request)}
+        );
+    }
 
     const openai = new OpenAI({
         apiKey: env.OPEN_AI_KEY,
     });
+
+    console.log(JSON.stringify(problemData.tests));
 
 
     let prompt = `
@@ -216,15 +252,28 @@ The user's code ran without any runtime errors. However, the user's code did not
             for (let i = 0; i < userData.testResults.testResults.length; i++) {
                 if (userData.testResults.testResults[i] === TestResult.Failed) {
                     if (i < problemData.tests.length) {
+                        let magicLinksText = "";
+                        for (let j = 0; j < problemData.tests[i].magicLinks.length; j++) {
+                            magicLinksText += `${problemData.tests[i].magicLinks[j].key}: ${problemData.tests[i].magicLinks[j].value}\n`;
+                        }
+
                         prompt += `
-- Test ${i + 1}: \`${problemData.testsDisplay[i]}\`
+- Test ${i + 1}: \`${problemData.tests[i].display}\`
+    - Where: \`${magicLinksText}\`
     - Returned: \`${userData.testResults.returnedResults[i]}\`
     - Expected: \`${userData.testResults.expectedResults[i]}\`
                         `;
                     } else {
                         if (hiddenFailedCount < 4) {
+                            let magicLinksText = "";
+                            for (let j = 0; j < problemData.hiddenTests[i - problemData.tests.length].magicLinks.length; j++) {
+                                magicLinksText += `${problemData.hiddenTests[i - problemData.tests.length].magicLinks[j].key}: ${problemData.hiddenTests[i - problemData.tests.length].magicLinks[j].value}\n`;
+                            }
+
+
                             prompt += `
-- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTestsDisplay[i - problemData.tests.length]}\`
+- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTests[i - problemData.tests.length]}\`
+    - Where: \`${magicLinksText}\`
     - Returned: \`${userData.testResults.returnedResults[i]}\`
     - Expected: \`${userData.testResults.expectedResults[i]}\`
     - THIS TEST IS CONFIDENTIAL. DO NOT DISCLOSE THE PARAMETERS OR THE EXPECTED RESULTS TO THE USER.
@@ -263,28 +312,28 @@ Tell the user of this and tell them if you can't help them. If you can help them
         "Also remember to keep the confidential stuff confidential."
     console.log(JSON.stringify(userData.testResults.runtimeError));
 
+    try {
+        const chatCompletion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    "role": "system",
+                    "content": systemMessage
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature: 1,
+            max_tokens: 256,
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0,
+        });
 
-    const chatCompletion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-            {
-                "role": "system",
-                "content": systemMessage
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature: 1,
-        max_tokens: 256,
-        top_p: 1,
-        frequency_penalty: 0,
-        presence_penalty: 0,
-    });
-
-    let rememberingPrompt =
-        `
+        let rememberingPrompt =
+            `
         Now that you have helped the user, please write a few sentences to remember what you did. This will be given back to you the next time the user asks for help.
         Be specific about what you did and what you suggested. This is for you, the tutor, to remember what you did and what you suggested so you can help the user better next time.
         Also discuss what you saw in the user's code and what you suggested to the user so you can keep track of what changes the user has made.
@@ -292,41 +341,55 @@ Tell the user of this and tell them if you can't help them. If you can help them
         Also write out the lines from the user's code that you wanted to address & what you ultimately want the user to write in those lines.
         `
 
-    const chatCompletion2 = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-            {
-                "role": "system",
-                "content": systemMessage
-            },
-            {
-                "role": "system",
-                "content": prompt
-            },
-            {
-                "role": "assistant",
-                "content": chatCompletion.choices[0].message.content
-            },
-            {
-                "role": "system",
-                "content": rememberingPrompt
-            }
-        ],
-        temperature: 1,
-        max_tokens: 256,
-        top_p: 1,
-        frequency_penalty: 0,
-        presence_penalty: 0,
-    });
+        const chatCompletion2 = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    "role": "system",
+                    "content": systemMessage
+                },
+                {
+                    "role": "system",
+                    "content": prompt
+                },
+                {
+                    "role": "assistant",
+                    "content": chatCompletion.choices[0].message.content
+                },
+                {
+                    "role": "system",
+                    "content": rememberingPrompt
+                }
+            ],
+            temperature: 1,
+            max_tokens: 256,
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0,
+        });
 
 
 
-    return new Response(JSON.stringify({
-        status: 200,
-        prompt: prompt,
-        response: chatCompletion.choices[0].message.content,
-        rememberingPrompt: rememberingPrompt,
-        rememberingResponse: chatCompletion2.choices[0].message.content,
-        expire_logins: false,
-    }), {status: 200, headers: getHeaders(request)});
+        return new Response(JSON.stringify({
+            status: 200,
+            prompt: prompt,
+            response: chatCompletion.choices[0].message.content,
+            rememberingPrompt: rememberingPrompt,
+            rememberingResponse: chatCompletion2.choices[0].message.content,
+            expire_logins: false,
+        }), {status: 200, headers: getHeaders(request)});
+    } catch (e) {
+        console.log(e);
+        return new Response(
+            JSON.stringify({
+                status: 500,
+                statusText: 'Internal Server Error 2',
+                error: JSON.stringify(e, Object.getOwnPropertyNames(e)),
+                expire_logins: false,
+            }),
+            {status: 500, headers: getHeaders(request)}
+        );
+    }
+
+
 }
