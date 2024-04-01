@@ -310,7 +310,6 @@ Tell the user of this and tell them if you can't help them. If you can help them
     prompt += "Make sure you're only addressing one issue in the user's code. If the user has multiple issues, address only one of them. " +
         "It should be the one that is preventing further progress on their debugging of the problem. " +
         "Also remember to keep the confidential stuff confidential."
-    console.log(JSON.stringify(userData.testResults.runtimeError));
 
     try {
         const chatCompletion = await openai.chat.completions.create({
