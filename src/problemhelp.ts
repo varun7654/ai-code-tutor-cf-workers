@@ -115,16 +115,20 @@ let systemMessage = "You are a helpful tutor on a website that is teaching peopl
     "# Thinking out loud\n" +
     "\n" +
     "The user won't be able to see this part. This is where you can think out loud and explain your thought process. " +
-    "If the user has multiple issues also use this space to decide on ONE that you will address now and which one you'll note for later. " +
-    "If the user is failing test cases walk though the code and figure out where the incorrect return is coming from for one or two of the test cases. " +
-    "This about the type of hint you want to give and how you give away as little as possible while still helping the user.\n" +
+    "\nList out the issue(s) the user has in a bulleted list. Then CHOSE ONE issue you will help the user with. This should be the one blocking further progress for the user." +
+    "\nWrite out a full response like you would respond to the user as a test. Then write yourself a few bullet points that could be improved with your response." +
     "\n" +
     "# My response\n" +
     "\n" +
-    "This is where you will give the user a hint on what to do. Explain to the user what they did wrong and how they can fix it. Do not give them the full solution.\n" +
+    "This is where you will give the user a hint on what to do. Explain to the user what they did wrong and how they can fix it. Do not give them the full solution. Take your response from earlier and amend it based on the feedback you gave yourself.\n" +
     "\n" +
-    "After you've finished your response, you will be asked to write down a few sentences to remember what you did. This is for you, the tutor, to remember what they did and what you suggested. " +
-    "Your response will be given back to you the next time the user asks for help.\n";
+    "# Remembering\n" +
+    "\n" +
+    "This is where you will be able to write down what you want to remember for the next time you help the user. " +
+    "Write down what you learned about the user's coding style and skill level. " +
+    "Also, write down the specific mistake the user made and how you helped them fix it. " +
+    "Write down a copy of the lines of code that the user made and the changes you want them to make." +
+    "\n These won't be visible to the user, but will be given to you the next time you help the user.\n";
 
 
 
@@ -309,7 +313,8 @@ Tell the user of this and tell them if you can't help them. If you can help them
 
     prompt += "Make sure you're only addressing one issue in the user's code. If the user has multiple issues, address only one of them. " +
         "It should be the one that is preventing further progress on their debugging of the problem. " +
-        "Also remember to keep the confidential stuff confidential."
+        "Also remember to keep the confidential stuff confidential." +
+        "\n Give your answer in the specified format including the 'Thinking out loud', 'My response', and 'Remembering' sections.";
 
     try {
         const chatCompletion = await openai.chat.completions.create({
@@ -325,43 +330,7 @@ Tell the user of this and tell them if you can't help them. If you can help them
                 }
             ],
             temperature: 1,
-            max_tokens: 256,
-            top_p: 1,
-            frequency_penalty: 0,
-            presence_penalty: 0,
-        });
-
-        let rememberingPrompt =
-            `
-        Now that you have helped the user, please write a few sentences to remember what you did. This will be given back to you the next time the user asks for help.
-        Be specific about what you did and what you suggested. This is for you, the tutor, to remember what you did and what you suggested so you can help the user better next time.
-        Also discuss what you saw in the user's code and what you suggested to the user so you can keep track of what changes the user has made.
-        
-        Also write out the lines from the user's code that you wanted to address & what you ultimately want the user to write in those lines.
-        `
-
-        const chatCompletion2 = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                {
-                    "role": "system",
-                    "content": systemMessage
-                },
-                {
-                    "role": "system",
-                    "content": prompt
-                },
-                {
-                    "role": "assistant",
-                    "content": chatCompletion.choices[0].message.content
-                },
-                {
-                    "role": "system",
-                    "content": rememberingPrompt
-                }
-            ],
-            temperature: 1,
-            max_tokens: 256,
+            max_tokens: 512,
             top_p: 1,
             frequency_penalty: 0,
             presence_penalty: 0,
@@ -373,8 +342,6 @@ Tell the user of this and tell them if you can't help them. If you can help them
             status: 200,
             prompt: prompt,
             response: chatCompletion.choices[0].message.content,
-            rememberingPrompt: rememberingPrompt,
-            rememberingResponse: chatCompletion2.choices[0].message.content,
             expire_logins: false,
         }), {status: 200, headers: getHeaders(request)});
     } catch (e) {
