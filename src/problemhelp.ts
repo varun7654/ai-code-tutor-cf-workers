@@ -2,6 +2,8 @@ import {Env, getHeaders} from "./handler";
 import fetchAdapter from "@vespaiach/axios-fetch-adapter";
 import  OpenAI from "openai";
 import Configuration from "openai"
+import {n} from "vitest/dist/global-58e8e951";
+import {Database} from "@cloudflare/d1";
 
 export class ProblemData {
     id: string = "";
@@ -165,20 +167,66 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
         );
     }
 
-    const ghUserData : {login: string} = await response.json();
-    const authorizedUsernames = ['varun7654', 'anishalata', 'Gresliebear', 'Spand3xN00dl3']; // Replace with your list of authorized usernames
+    const ghUserData : {login: string, id: number} = await response.json();
 
-    if (!authorizedUsernames.includes(ghUserData.login)) {
-        return new Response(
-            JSON.stringify({
-                status: 401,
-                statusText: 'Unauthorized',
-                expire_logins: false,
-                error: 'User is not authorized to access this resource'
-            }),
-            {status: 401, headers: getHeaders(request)}
-        );
+
+    const getUser =  env.DB.prepare("SELECT AUTHORIZED, RATE_LIMIT_TIMESTAMP FROM USERS WHERE USER_ID = ?1").bind(ghUserData.id.toString());
+
+    let getUserDBResponse = await getUser.first() as {AUTHORIZED: number, RATE_LIMIT_TIMESTAMP: string} | undefined;
+
+    console.log(JSON.stringify(getUserDBResponse));
+    let current = new Date();
+
+    let newRateLimitTimestamp = new Date(current.getTime() + 60000);
+
+    if (!getUserDBResponse) {
+        // Add the user to the database
+        const insertUser = env.DB.prepare("INSERT INTO USERS (USER_ID, AUTHORIZED, RATE_LIMIT_TIMESTAMP) VALUES (?1, ?2, ?3)")
+            .bind(ghUserData.id.toString(), false, newRateLimitTimestamp.toISOString());
+        await insertUser.run();
+    } else {
+        let nextAllowed = new Date(getUserDBResponse.RATE_LIMIT_TIMESTAMP);
+
+        if (current < nextAllowed) {
+            let waitTime = Math.ceil((nextAllowed.getTime() - current.getTime()) / 1000);
+            return new Response(
+                JSON.stringify({
+                    status: 429,
+                    statusText: 'Rate Limited',
+                    expire_logins: false,
+                    error: 'Rate limited. Please try again later.',
+                    wait_time: waitTime
+                }),
+                {status: 429, headers: getHeaders(request)}
+            );
+        }
+
+        // 1 min in the future
+        const updateRateLimit = env.DB.prepare("UPDATE USERS SET RATE_LIMIT_TIMESTAMP = ?1 WHERE USER_ID = ?2")
+            .bind(newRateLimitTimestamp.toISOString(), ghUserData.id.toString());
+
+        await updateRateLimit.run();
     }
+
+    let waitTime = Math.ceil((newRateLimitTimestamp.getTime() - current.getTime()) / 1000);
+
+
+
+
+
+
+
+    // if (!authorizedUsernames.includes(ghUserData.login)) {
+    //     return new Response(
+    //         JSON.stringify({
+    //             status: 401,
+    //             statusText: 'Unauthorized',
+    //             expire_logins: false,
+    //             error: 'User is not authorized to access this resource'
+    //         }),
+    //         {status: 401, headers: getHeaders(request)}
+    //     );
+    // }
     let userData: UserData;
     let problemData: ProblemData;
     try {
@@ -195,11 +243,21 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
                 statusText: 'Internal Server Error 1',
                 error: JSON.stringify(e, Object.getOwnPropertyNames(e)),
                 expire_logins: false,
+                wait_time: waitTime
             }),
             {status: 500, headers: getHeaders(request)}
         );
     }
 
+    if (!env.OPEN_AI_KEY) {
+        return new Response(JSON.stringify({
+            status: 200,
+            prompt: "The AI tutor is not configured properly. Please contact the site administrator.",
+            response: "An error occurred trying to talk to the AI tutor. Please try again later.",
+            expire_logins: false,
+            wait_time: waitTime
+        }), {status: 200, headers: getHeaders(request)});
+    }
     const openai = new OpenAI({
         apiKey: env.OPEN_AI_KEY,
     });
@@ -228,16 +286,6 @@ The user is not given the solution code. The user is not to gain access to the s
     prompt += `
 \`\`\`
 ${userData.aiRememberResponse.join("\n\n")}
-\`\`\`
-`;
-
-
-    prompt += `
-# The user's code is as follows:
-\`\`\`${problemData.codeLang}
-// Below is the first line the user has wrote. This is line 0
-${userData.currentCode}
-// Below is the last line the user has wrote. This is line ${userData.currentCode.split('\n').length - 1}
 \`\`\`
 `;
 
@@ -311,7 +359,17 @@ Tell the user of this and tell them if you can't help them. If you can help them
         }
     }
 
-    prompt += "Make sure you're only addressing one issue in the user's code. If the user has multiple issues, address only one of them. " +
+    prompt += `
+# The user's code is as follows:
+\`\`\`${problemData.codeLang}
+// Below is the first line the user has wrote. It is line 1
+${userData.currentCode.trimEnd()}
+// Above is the last line the user has wrote. This is line ${userData.currentCode.split('\n').length + 1}
+\`\`\`
+`;
+
+
+    prompt += "Make sure you ONLY ADDRESS ONE issue in the user's code. If the user has multiple issues, address ONLY ONE of them. " +
         "It should be the one that is preventing further progress on their debugging of the problem. " +
         "Also remember to keep the confidential stuff confidential." +
         "\n Give your answer in the specified format including the 'Thinking out loud', 'My response', and 'Remembering' sections.";
@@ -343,6 +401,7 @@ Tell the user of this and tell them if you can't help them. If you can help them
             prompt: prompt,
             response: chatCompletion.choices[0].message.content,
             expire_logins: false,
+            wait_time: waitTime
         }), {status: 200, headers: getHeaders(request)});
     } catch (e) {
         console.log(e);
@@ -352,6 +411,7 @@ Tell the user of this and tell them if you can't help them. If you can help them
                 statusText: 'Internal Server Error 2',
                 error: JSON.stringify(e, Object.getOwnPropertyNames(e)),
                 expire_logins: false,
+                wait_time: waitTime
             }),
             {status: 500, headers: getHeaders(request)}
         );
