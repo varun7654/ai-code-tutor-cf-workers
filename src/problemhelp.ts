@@ -4,8 +4,10 @@ import  OpenAI from "openai";
 import Configuration from "openai"
 import {n} from "vitest/dist/global-58e8e951";
 import {Database} from "@cloudflare/d1";
-import {GoogleGenerativeAI, HarmCategory, HarmBlockThreshold} from "@google/generative-ai";
+import {GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerativeModel} from "@google/generative-ai";
 
+
+const DEFAULT_MODEL = "gemini-1.5-flash-latest";
 export class ProblemData {
     id: string = "";
     title: string = 'Loading...';
@@ -51,7 +53,7 @@ export class UserData {
     currentCode: string = null as unknown as string;
     aiRememberResponse: string[] = [];
 
-    constructor(history: string[] = [], requestHelpHistory: string[] = [],  testResults: TestResults = new TestResults(), lastUpdated: Date = new Date(), currentCode: string = "") {
+    constructor(history: string[] = [], requestHelpHistory: string[] = [], testResults: TestResults = new TestResults(), lastUpdated: Date = new Date(), currentCode: string = "") {
         this.history = history;
         this.testResults = testResults;
         this.requestHelpHistory = requestHelpHistory;
@@ -61,7 +63,7 @@ export class UserData {
 }
 
 export class TestResults {
-    public testResults: TestResult[]  = [];
+    public testResults: TestResult[] = [];
     public returnedResults: string[] = [];
     public expectedResults: string[] = [];
     public parseError: string = "";
@@ -83,14 +85,22 @@ let systemMessage = "You are a helpful tutor on a website that is teaching peopl
     "\n" +
     "\"We\"/\"Our\" refers to the operators of the site. We will refer to the user as \"user\"\n" +
     "# Things to keep in mind\n" +
+    " - The user is coding in javascript.\n" +
     " - Check if the user is using the right variable names and capitalization errors.\n" +
-    " - The user can see line numbers. If you want to refer to a specific line, use the line number.\n" +
+    " - You do not know how to count properly. When referring to a specific line include a snippit of the code instead of referring to the line number. Like this:\n" +
+    "  ```javascript\n" +
+    "  let a = 0;\n" +
+    "  let b = 0;\n // <-- Here (or you may write a short message)" +
+    "  let c = a + b;\n" +
+    "  ```\n" +
     " - Check the user is defining the same function that is being called in the solution/test cases.\n" +
     " - The user cannot directly talk to you or ask questions to the tutor.\n" +
     " - Avoid giving the user the full solution.\n" +
-    " - Start by giving the smallest hint possible. If the user is still stuck, give a bigger hint.\n" +
-    " - If the user isn't able to implement a fix from a previous hint, give them a hint that is more detailed and specific.\n" +
+    " - Start by giving the smallest hint possible. If the user is still stuck after multiple hints on the same issue, give a bigger hint.\n" +
+    "   - If the user isn't able to implement a fix from a previous hint, give them a hint that is more detailed and specific.\n" +
+    "   - If possible have the initial hint contain contain no code for them to copy paste. Try to make sure they are writing as much of the code themselves as possible.\n" +
     " - The user can see the visible test cases (what they returned and what was expected). Maybe they can use that to figure out the problem?\n" +
+    " - Beware that the user may be testing their code in parts. They may not have written the full solution yet.\n" +
     " - The user does not have access the solution code DO NOT MENTION IT. There is no example solution.\n" +
     "\n" +
     "Give your answers in the following format:\n" +
@@ -99,7 +109,7 @@ let systemMessage = "You are a helpful tutor on a website that is teaching peopl
     "\n" +
     "The user won't be able to see this part. This is where you can think out loud and explain your thought process. " +
     "\nList out the issue(s) the user has in a bulleted list. Then CHOSE ONE issue you will help the user with. This should be the one blocking further progress for the user." +
-    "\nWrite out a full response like you would respond to the user as a test. Then write yourself a few bullet points that could be improved with your response.\n" +
+    "Start with errors they are seeing first, then issues in the parts they've implemented second, and finally parts missing from the implementation.\n" +
     "\n" +
     "# My response\n" +
     "\n" +
@@ -146,18 +156,36 @@ async function getAIResponse(prompt: string, env: Env, engine: string) {
     } else if (engine.startsWith("gemini"), env.GOOGLE_GENERATIVE_AI_API_KEY) {
         const genAI = new GoogleGenerativeAI(env.GOOGLE_GENERATIVE_AI_API_KEY);
 
-        const model = genAI.getGenerativeModel({
-            model: engine,
-            systemInstruction: systemMessage,
-        });
+        let model: GenerativeModel;
+        let generationConfig: { temperature: number; topP: number; topK: number; maxOutputTokens: number; responseMimeType: string; };
 
-        const generationConfig = {
-            temperature: 1,
-            topP: 0.95,
-            topK: 64,
-            maxOutputTokens: 8192,
-            responseMimeType: "text/plain",
-        };
+        if (engine.startsWith("gemini-1.0-pro")) {
+            model = genAI.getGenerativeModel({
+                model: engine,
+            });
+            generationConfig = {
+                temperature: 0.9,
+                topP: 1,
+                topK: 0,
+                maxOutputTokens: 2048,
+                responseMimeType: "text/plain",
+            };
+
+            prompt = systemMessage + "\n" + prompt;
+        } else {
+            model = genAI.getGenerativeModel({
+                model: engine,
+                systemInstruction: systemMessage,
+            });
+
+            generationConfig = {
+                temperature: 1,
+                topP: 0.95,
+                topK: 64,
+                maxOutputTokens: 8192,
+                responseMimeType: "text/plain",
+            };
+        }
 
         const safetySettings = [
             {
@@ -194,7 +222,7 @@ async function getAIResponse(prompt: string, env: Env, engine: string) {
 export async function handleProblemHelp(request: Request, env: Env): Promise<Response> {
     const authHeader = request.headers.get('Authorization');
     let params = new URL(request.url).searchParams;
-    let engine = params.get('engine') || "openai-gpt-3.5-turbo";
+    let engine = params.get('engine') || DEFAULT_MODEL;
     let shouldCallAPI = !(params.get('callAPI') === "false");
     if (!authHeader || !authHeader.startsWith('token ') || authHeader.split(' ').length !== 2) {
         return new Response(
@@ -235,6 +263,7 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
     console.log(JSON.stringify(getUserDBResponse));
     let current = new Date();
 
+    // 1 min in the future or 10s if the user is authorized
     let newRateLimitTimestamp = new Date(current.getTime() + 60000);
 
     let isSuperUser = false;
@@ -247,6 +276,10 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
     } else {
         let nextAllowed = new Date(getUserDBResponse.RATE_LIMIT_TIMESTAMP);
         isSuperUser = getUserDBResponse.AUTHORIZED === 1;
+
+        if (isSuperUser) {
+            newRateLimitTimestamp = new Date(current.getTime() + 10000);
+        }
 
         if (current < nextAllowed) {
             let waitTime = Math.ceil((nextAllowed.getTime() - current.getTime()) / 1000);
@@ -262,7 +295,6 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
             );
         }
 
-        // 1 min in the future
         if (shouldCallAPI) {
             const updateRateLimit = env.DB.prepare("UPDATE USERS SET RATE_LIMIT_TIMESTAMP = ?1 WHERE USER_ID = ?2")
                 .bind(newRateLimitTimestamp.toISOString(), ghUserData.id.toString());
@@ -420,7 +452,7 @@ ${userData.currentCode.trimEnd().replace("\t", "  ")}
 
     if (!isSuperUser) {
         // Only allow the user to use the openai-gpt-3.5-turbo engine
-        engine = "openai-gpt-3.5-turbo";
+        engine = DEFAULT_MODEL;
     }
     try {
 
