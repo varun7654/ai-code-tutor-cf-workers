@@ -48,6 +48,7 @@ export interface Env {
     //This will be auto-populated with the KV Namespace that is bound in the wrangler.toml
     //and exposes all the methods you'll need (get, put, list etc.)
     OPEN_AI_KEY: string;
+    GOOGLE_GENERATIVE_AI_API_KEY: string;
     CLIENT_ID: string;
     CLIENT_SECRET: string;
     CLIENT_ID_DEV: string;

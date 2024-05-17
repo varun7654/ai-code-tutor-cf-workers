@@ -4,6 +4,7 @@ import  OpenAI from "openai";
 import Configuration from "openai"
 import {n} from "vitest/dist/global-58e8e951";
 import {Database} from "@cloudflare/d1";
+import {GoogleGenerativeAI, HarmCategory, HarmBlockThreshold} from "@google/generative-ai";
 
 export class ProblemData {
     id: string = "";
@@ -80,30 +81,10 @@ export enum TestResult {
 
 let systemMessage = "You are a helpful tutor on a website that is teaching people to know how to code to be referred to as \"the tutor\". \n" +
     "\n" +
-    "\"We\"  /  \"Our\" refers to the operators of the site. We will refer to the user as \"user\"\n" +
-    "\n" +
-    "Your goal is to help fix the specific issue that is making the user stuck. Do not give the user full solutions and ensure that you do not disclose parts that are marked confidential.\n" +
-    "\n" +
-    "You have access to solutions and hidden test cases that are not to be disclosed to the user. They are confidential. DO NOT SHARE THEM. THE USER IS NOT TO GAIN ACCESS TO THEM UNDER ANY CIRCUMSTANCES.\n" +
-    "\n" +
-    "The solutions are also not the only way to solve the problem. If the user is using an alternate method, help them progress though that one instead.\n" +
-    " \n" +
-    "Give your answers concisely. Explain to the user what mistake they made and explain how the user can solve it. Do not give a final, \"corrected code snippet\". You do not need to write any code if the correction that the user needs to make is obvious from your explanation of the problem in the user's code. \n" +
-    "\n" +
-    "Once again, your goal is not to give a solution to the whole problem. You are trying to give the user a small hint of where their error is to help \"unstuck\" them. If the user has multiple issues in their code address only one of them. It should be the one that is preventing further progressing on their debugging of the problem.\n" +
-    "\n" +
-    "You are talking directly to the user, but you should not greet them. Address them as \"you\".\n" +
-    "\n" +
-    "If the code is working give the user a quick congratulations.\n" +
-    "If the user hasn't submitted anything only give them a small hint on what to do first.\n" +
-    "\n" +
-    "Format your response using markdown. You can also use KaTeX to format math. KaTex must be sounded by $s\n" +
-    "\n" +
+    "\"We\"/\"Our\" refers to the operators of the site. We will refer to the user as \"user\"\n" +
     "# Things to keep in mind\n" +
-    "\n" +
     " - Check if the user is using the right variable names and capitalization errors.\n" +
     " - The user can see line numbers. If you want to refer to a specific line, use the line number.\n" +
-    " - Check for stray characters and syntax errors.\n" +
     " - Check the user is defining the same function that is being called in the solution/test cases.\n" +
     " - The user cannot directly talk to you or ask questions to the tutor.\n" +
     " - Avoid giving the user the full solution.\n" +
@@ -118,7 +99,7 @@ let systemMessage = "You are a helpful tutor on a website that is teaching peopl
     "\n" +
     "The user won't be able to see this part. This is where you can think out loud and explain your thought process. " +
     "\nList out the issue(s) the user has in a bulleted list. Then CHOSE ONE issue you will help the user with. This should be the one blocking further progress for the user." +
-    "\nWrite out a full response like you would respond to the user as a test. Then write yourself a few bullet points that could be improved with your response." +
+    "\nWrite out a full response like you would respond to the user as a test. Then write yourself a few bullet points that could be improved with your response.\n" +
     "\n" +
     "# My response\n" +
     "\n" +
@@ -130,14 +111,91 @@ let systemMessage = "You are a helpful tutor on a website that is teaching peopl
     "Write down what you learned about the user's coding style and skill level. " +
     "Also, write down the specific mistake the user made and how you helped them fix it. " +
     "Write down a copy of the lines of code that the user made and the changes you want them to make." +
-    "\n These won't be visible to the user, but will be given to you the next time you help the user.\n";
+    "\nThese won't be visible to the user, but the last 5 of them will be given to you the next time you help the user.\n";
 
 
+async function getAIResponse(prompt: string, env: Env, engine: string) {
+    let response = "";
+    if (engine.startsWith("openai-") && !env.OPEN_AI_KEY) {
+        const openai = new OpenAI({
+            apiKey: env.OPEN_AI_KEY,
+        });
 
+        let model = engine.replace("openai-", "");
 
+        const chatCompletion = await openai.chat.completions.create({
+            model: model,
+            messages: [
+                {
+                    "role": "system",
+                    "content": systemMessage
+                },
+                {
+                    "role": "system",
+                    "content": prompt
+                }
+            ],
+            temperature: 1,
+            max_tokens: 512,
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0,
+        });
+
+        response = chatCompletion.choices[0].message.content;
+    } else if (engine.startsWith("gemini"), env.GOOGLE_GENERATIVE_AI_API_KEY) {
+        const genAI = new GoogleGenerativeAI(env.GOOGLE_GENERATIVE_AI_API_KEY);
+
+        const model = genAI.getGenerativeModel({
+            model: engine,
+            systemInstruction: systemMessage,
+        });
+
+        const generationConfig = {
+            temperature: 1,
+            topP: 0.95,
+            topK: 64,
+            maxOutputTokens: 8192,
+            responseMimeType: "text/plain",
+        };
+
+        const safetySettings = [
+            {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            },
+            {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            },
+            {
+                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            },
+            {
+                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            },
+        ];
+
+        const chatSession = model.startChat({
+            generationConfig,
+            safetySettings
+        });
+
+        const result = await chatSession.sendMessage(prompt);
+
+        response = result.response.text();
+    }
+
+    return response;
+}
 
 export async function handleProblemHelp(request: Request, env: Env): Promise<Response> {
     const authHeader = request.headers.get('Authorization');
+    let params = new URL(request.url).searchParams;
+    let engine = params.get('engine') || "openai-gpt-3.5-turbo";
+    let shouldCallAPI = !(params.get('callAPI') === "false");
     if (!authHeader || !authHeader.startsWith('token ') || authHeader.split(' ').length !== 2) {
         return new Response(
             JSON.stringify({status: 401, statusText: 'Unauthorized (Invalid token)', expire_logins: false}),
@@ -167,17 +225,19 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
         );
     }
 
-    const ghUserData : {login: string, id: number} = await response.json();
+    const ghUserData: { login: string, id: number } = await response.json();
 
 
-    const getUser =  env.DB.prepare("SELECT AUTHORIZED, RATE_LIMIT_TIMESTAMP FROM USERS WHERE USER_ID = ?1").bind(ghUserData.id.toString());
+    const getUser = env.DB.prepare("SELECT AUTHORIZED, RATE_LIMIT_TIMESTAMP FROM USERS WHERE USER_ID = ?1").bind(ghUserData.id.toString());
 
-    let getUserDBResponse = await getUser.first() as {AUTHORIZED: number, RATE_LIMIT_TIMESTAMP: string} | undefined;
+    let getUserDBResponse = await getUser.first() as { AUTHORIZED: number, RATE_LIMIT_TIMESTAMP: string } | undefined;
 
     console.log(JSON.stringify(getUserDBResponse));
     let current = new Date();
 
     let newRateLimitTimestamp = new Date(current.getTime() + 60000);
+
+    let isSuperUser = false;
 
     if (!getUserDBResponse) {
         // Add the user to the database
@@ -186,6 +246,7 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
         await insertUser.run();
     } else {
         let nextAllowed = new Date(getUserDBResponse.RATE_LIMIT_TIMESTAMP);
+        isSuperUser = getUserDBResponse.AUTHORIZED === 1;
 
         if (current < nextAllowed) {
             let waitTime = Math.ceil((nextAllowed.getTime() - current.getTime()) / 1000);
@@ -202,18 +263,14 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
         }
 
         // 1 min in the future
-        const updateRateLimit = env.DB.prepare("UPDATE USERS SET RATE_LIMIT_TIMESTAMP = ?1 WHERE USER_ID = ?2")
-            .bind(newRateLimitTimestamp.toISOString(), ghUserData.id.toString());
-
-        await updateRateLimit.run();
+        if (shouldCallAPI) {
+            const updateRateLimit = env.DB.prepare("UPDATE USERS SET RATE_LIMIT_TIMESTAMP = ?1 WHERE USER_ID = ?2")
+                .bind(newRateLimitTimestamp.toISOString(), ghUserData.id.toString());
+            await updateRateLimit.run();
+        }
     }
 
     let waitTime = Math.ceil((newRateLimitTimestamp.getTime() - current.getTime()) / 1000);
-
-
-
-
-
 
 
     // if (!authorizedUsernames.includes(ghUserData.login)) {
@@ -233,8 +290,8 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
 
         let body = await request.json();
 
-         userData = body.userData as UserData;
-         problemData = body.problemData as ProblemData;
+        userData = body.userData as UserData;
+        problemData = body.problemData as ProblemData;
     } catch (e) {
         console.log(e);
         return new Response(
@@ -249,19 +306,6 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
         );
     }
 
-    if (!env.OPEN_AI_KEY) {
-        return new Response(JSON.stringify({
-            status: 200,
-            prompt: "The AI tutor is not configured properly. Please contact the site administrator.",
-            response: "An error occurred trying to talk to the AI tutor. Please try again later.",
-            expire_logins: false,
-            wait_time: waitTime
-        }), {status: 200, headers: getHeaders(request)});
-    }
-    const openai = new OpenAI({
-        apiKey: env.OPEN_AI_KEY,
-    });
-
     console.log(JSON.stringify(problemData.tests));
 
 
@@ -269,25 +313,25 @@ export async function handleProblemHelp(request: Request, env: Env): Promise<Res
 A user is asking for help with the following problem. The problem is as follows:
 ## ${problemData.title}
 ${problemData.description}
-## Here is an example solution to further illustrate the problem:
+## Example solution ONLY FOR THE AI Tutor:
 ${problemData.solution}
 
 DO NOT SHARE THE SOLUTION CODE WITH THE USER. The user does not know the existence of the solution code. DO NOT MENTION IT.
 The user is not given the solution code. The user is not to gain access to the solution code under any circumstances.
 `;
 
-    prompt += "You've chosen to remember the following things from the last time you helped the user:\n" +
-        "The ones closer to the bottom are the most recent. The ones closer to the top are the oldest.\n" +
-        "If you realized you made a mistake acknowledge and apologize for it.\n";
+    let last5remembered = userData.aiRememberResponse.slice(Math.max(userData.aiRememberResponse.length - 5, 0));
+
+    prompt += "You've chosen to remember the following things from the last time you helped the user (oldest to newest):\n";
     if (userData.aiRememberResponse.length === 0) {
         prompt += "You have not helped the user before. You don't have anything to remember.\n";
-    }
-
-    prompt += `
-\`\`\`
-${userData.aiRememberResponse.join("\n\n")}
-\`\`\`
+    } else {
+        prompt += `
+- ${last5remembered.join("\n -")}
 `;
+        prompt+="\n\nIf you realized you made a mistake acknowledge and apologize for it.\n";
+
+}
 
     if (userData.testResults.ranSuccessfully) {
         if (userData.testResults.testResults.every(result => result === TestResult.Passed)) {
@@ -297,7 +341,7 @@ The user's code is working. Congratulations to the user.
         } else {
             prompt += `
 The user's code ran without any runtime errors. However, the user's code did not pass all the tests. The user's code did not pass the following tests:
-            `
+`
 
             let hiddenFailedCount = 0;
 
@@ -306,7 +350,7 @@ The user's code ran without any runtime errors. However, the user's code did not
                     if (i < problemData.tests.length) {
                         let magicLinksText = "";
                         for (let j = 0; j < problemData.tests[i].magicLinks.length; j++) {
-                            magicLinksText += `${problemData.tests[i].magicLinks[j].key}: ${problemData.tests[i].magicLinks[j].value}\n`;
+                            magicLinksText += `${problemData.tests[i].magicLinks[j].key}: ${problemData.tests[i].magicLinks[j].value}`;
                         }
 
                         prompt += `
@@ -319,12 +363,12 @@ The user's code ran without any runtime errors. However, the user's code did not
                         if (hiddenFailedCount < 4) {
                             let magicLinksText = "";
                             for (let j = 0; j < problemData.hiddenTests[i - problemData.tests.length].magicLinks.length; j++) {
-                                magicLinksText += `${problemData.hiddenTests[i - problemData.tests.length].magicLinks[j].key}: ${problemData.hiddenTests[i - problemData.tests.length].magicLinks[j].value}\n`;
+                                magicLinksText += `${problemData.hiddenTests[i - problemData.tests.length].magicLinks[j].key}: ${problemData.hiddenTests[i - problemData.tests.length].magicLinks[j].value}`;
                             }
 
 
                             prompt += `
-- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTests[i - problemData.tests.length]}\`
+- Hidden Test ${i - problemData.tests.length + 1}: \`${problemData.hiddenTests[i - problemData.tests.length].display}\`
     - Where: \`${magicLinksText}\`
     - Returned: \`${userData.testResults.returnedResults[i]}\`
     - Expected: \`${userData.testResults.expectedResults[i]}\`
@@ -363,8 +407,8 @@ Tell the user of this and tell them if you can't help them. If you can help them
 # The user's code is as follows:
 \`\`\`${problemData.codeLang}
 // Below is the first line the user has wrote. It is line 1
-${userData.currentCode.trimEnd()}
-// Above is the last line the user has wrote. This is line ${userData.currentCode.split('\n').length + 1}
+${userData.currentCode.trimEnd().replace("\t", "  ")}
+// Above is the last line the user has wrote. It is line ${userData.currentCode.split('\n').length}
 \`\`\`
 `;
 
@@ -372,36 +416,26 @@ ${userData.currentCode.trimEnd()}
     prompt += "Make sure you ONLY ADDRESS ONE issue in the user's code. If the user has multiple issues, address ONLY ONE of them. " +
         "It should be the one that is preventing further progress on their debugging of the problem. " +
         "Also remember to keep the confidential stuff confidential." +
-        "\n Give your answer in the specified format including the 'Thinking out loud', 'My response', and 'Remembering' sections.";
+        "\nGive your answer in the specified format including the 'Thinking out loud', 'My response', and 'Remembering' sections.";
 
+    if (!isSuperUser) {
+        // Only allow the user to use the openai-gpt-3.5-turbo engine
+        engine = "openai-gpt-3.5-turbo";
+    }
     try {
-        const chatCompletion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                {
-                    "role": "system",
-                    "content": systemMessage
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature: 1,
-            max_tokens: 512,
-            top_p: 1,
-            frequency_penalty: 0,
-            presence_penalty: 0,
-        });
 
-
+        let aiResponse = "";
+        if (shouldCallAPI) {
+            aiResponse = await getAIResponse(prompt, env, engine);
+        }
 
         return new Response(JSON.stringify({
             status: 200,
             prompt: prompt,
-            response: chatCompletion.choices[0].message.content,
+            response: aiResponse,
             expire_logins: false,
-            wait_time: waitTime
+            wait_time: waitTime,
+            model: engine
         }), {status: 200, headers: getHeaders(request)});
     } catch (e) {
         console.log(e);

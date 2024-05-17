@@ -10,6 +10,7 @@
     ]
   },
   "dependencies": {
+    "@google/generative-ai": "^0.11.2",
     "@vespaiach/axios-fetch-adapter": "^0.3.1",
     "cors": "^2.8.5",
     "itty-router": "^4.2.1",
